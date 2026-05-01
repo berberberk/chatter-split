@@ -32,7 +32,7 @@ def print_make_help(console: Console | None = None) -> None:
     console.print(f"[cyan]Version:[/cyan] {version}")
     console.print("\n[bold]Commands:[/bold]")
     console.print("  [green]make test[/green]  - run unit tests")
-    console.print("  [green]make run[/green]   - transcribe inbox/input.mp3 to output/transcript.md")
+    console.print("  [green]make run[/green]   - transcribe inbox/input.<ext> to output/transcript.md")
     console.print("  [green]make api[/green]   - start FastAPI server on :8000")
     console.print("  [green]make lint[/green]  - compile-check sources")
 

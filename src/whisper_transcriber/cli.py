@@ -8,6 +8,7 @@ import typer
 from rich.console import Console
 
 from whisper_transcriber.diarizer import SpeakerDiarizer
+from whisper_transcriber.input_resolver import resolve_input_audio
 from whisper_transcriber.pipeline import TranscriptionPipeline
 from whisper_transcriber.transcriber import WhisperTranscriber
 
@@ -107,7 +108,10 @@ def run_transcription(input_file: Path, output_file: Path) -> Path:
 
 @app.command("run")
 def run_command() -> None:
-    input_file = INBOX_DIR / "input.mp3"
+    input_file = resolve_input_audio(INBOX_DIR)
+    if input_file is None:
+        logger.error("Input audio file was not found in: %s", INBOX_DIR)
+        raise typer.BadParameter(f"Input file does not exist: {INBOX_DIR / 'input.<ext>'}")
     output_file = OUTPUT_DIR / "transcript.md"
     saved = run_transcription(input_file, output_file)
     console.print(f"[green]Saved transcript:[/green] {saved}")

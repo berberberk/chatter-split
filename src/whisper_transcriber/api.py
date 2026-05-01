@@ -7,6 +7,7 @@ from typing import Callable
 from fastapi import FastAPI, HTTPException
 
 from whisper_transcriber.cli import INBOX_DIR, OUTPUT_DIR, build_pipeline
+from whisper_transcriber.input_resolver import resolve_input_audio
 from whisper_transcriber.pipeline import TranscriptionPipeline
 
 
@@ -28,12 +29,12 @@ def create_app(
 
     @app.post("/transcribe")
     def transcribe() -> dict[str, str]:
-        input_file = inbox_dir / "input.mp3"
+        input_file = resolve_input_audio(inbox_dir)
         output_file = output_dir / "transcript.md"
 
-        if not input_file.exists():
-            logger.error("Input file does not exist: %s", input_file)
-            raise HTTPException(status_code=400, detail=f"Input file does not exist: {input_file}")
+        if input_file is None:
+            logger.error("Input audio file was not found in: %s", inbox_dir)
+            raise HTTPException(status_code=400, detail=f"Input file does not exist: {inbox_dir / 'input.<ext>'}")
 
         output_dir.mkdir(parents=True, exist_ok=True)
         logger.info("Transcription requested for file: %s", input_file)
