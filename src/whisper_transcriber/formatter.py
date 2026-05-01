@@ -3,6 +3,11 @@ from __future__ import annotations
 from typing import Iterable
 
 
+def _join_turn_messages(messages: list[str]) -> str:
+    text = " ".join(message.strip() for message in messages if message.strip())
+    return " ".join(text.split())
+
+
 def render_markdown_dialogue(turns: Iterable[tuple[str, str]]) -> str:
     blocks: list[tuple[str, list[str]]] = []
 
@@ -19,8 +24,7 @@ def render_markdown_dialogue(turns: Iterable[tuple[str, str]]) -> str:
     lines: list[str] = []
     for i, (speaker, messages) in enumerate(blocks):
         lines.append(f"{speaker}:")
-        for message in messages:
-            lines.append(f"- {message}")
+        lines.append(f"- {_join_turn_messages(messages)}")
         if i != len(blocks) - 1:
             lines.append("")
 

@@ -41,11 +41,11 @@ PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
 load_environment(PROJECT_ROOT)
 
 
-def build_pipeline() -> TranscriptionPipeline:
+def build_pipeline(expected_speakers: int | None = None) -> TranscriptionPipeline:
     logger.info("Preparing transcription pipeline")
     return TranscriptionPipeline(
         transcriber=WhisperTranscriber(model_name="small"),
-        diarizer=SpeakerDiarizer(),
+        diarizer=SpeakerDiarizer(expected_speakers=expected_speakers),
     )
 
 
@@ -112,7 +112,7 @@ def _custom_help() -> str:
         "[bold]Options:[/bold]\n"
         "  --help, -h  Show this message and exit.\n\n"
         "[bold]Commands:[/bold]\n"
-        "  run\n"
+        "  run [--speakers N]\n"
         "  api\n"
     )
 
@@ -128,14 +128,14 @@ def root_callback(
         raise typer.Exit()
 
 
-def run_transcription(input_file: Path, output_file: Path) -> Path:
+def run_transcription(input_file: Path, output_file: Path, expected_speakers: int | None = None) -> Path:
     if not input_file.exists():
         logger.error("Input file does not exist: %s", input_file)
         raise typer.BadParameter(f"Input file does not exist: {input_file}")
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Starting transcription: %s", input_file.name)
-    pipeline = build_pipeline()
+    pipeline = build_pipeline() if expected_speakers is None else build_pipeline(expected_speakers=expected_speakers)
     logger.info("Running speech recognition and speaker separation")
     markdown = pipeline.run(input_file)
     output_file.write_text(markdown, encoding="utf-8")
@@ -144,13 +144,22 @@ def run_transcription(input_file: Path, output_file: Path) -> Path:
 
 
 @app.command("run")
-def run_command() -> None:
+def run_command(
+    speakers: int | None = typer.Option(
+        None,
+        "--speakers",
+        "-s",
+        min=1,
+        max=12,
+        help="Expected number of speakers. Defaults to CHATTERSPLIT_EXPECTED_SPEAKERS or 4.",
+    ),
+) -> None:
     input_file = resolve_input_audio(INBOX_DIR)
     if input_file is None:
         logger.error("Input audio file was not found in: %s", INBOX_DIR)
         raise typer.BadParameter(f"Input file does not exist: {INBOX_DIR / 'input.<ext>'}")
     output_file = OUTPUT_DIR / "transcript.md"
-    saved = run_transcription(input_file, output_file)
+    saved = run_transcription(input_file, output_file, expected_speakers=speakers)
     console.print(f"[green]Saved transcript:[/green] {saved}")
 
 
