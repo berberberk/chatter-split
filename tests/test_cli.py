@@ -49,6 +49,28 @@ def test_cli_run_writes_output_file_for_m4a(monkeypatch, tmp_path: Path) -> None
     assert "Speaker 1:" in content
 
 
+def test_cli_run_passes_expected_speakers(monkeypatch, tmp_path: Path) -> None:
+    inbox = tmp_path / "inbox"
+    output = tmp_path / "output"
+    inbox.mkdir()
+    output.mkdir()
+    (inbox / "input.m4a").write_bytes(b"fake")
+    received: dict[str, int | None] = {}
+
+    def fake_build_pipeline(expected_speakers: int | None = None) -> FakePipeline:
+        received["expected_speakers"] = expected_speakers
+        return FakePipeline()
+
+    monkeypatch.setattr("whisper_transcriber.cli.INBOX_DIR", inbox)
+    monkeypatch.setattr("whisper_transcriber.cli.OUTPUT_DIR", output)
+    monkeypatch.setattr("whisper_transcriber.cli.build_pipeline", fake_build_pipeline)
+
+    result = runner.invoke(app, ["run", "--speakers", "4"])
+
+    assert result.exit_code == 0
+    assert received["expected_speakers"] == 4
+
+
 def test_cli_run_fails_when_input_missing(monkeypatch, tmp_path: Path) -> None:
     inbox = tmp_path / "inbox"
     output = tmp_path / "output"
