@@ -14,7 +14,7 @@ Speaker 2:
 
 ## Project structure
 
-- `inbox/input.mp3` - input audio file.
+- `inbox/input.<ext>` - input audio file (`mp3`, `m4a`, `wav`, `flac`, `ogg`, `aac`, `mp4`, `webm`).
 - `output/transcript.md` - generated transcript.
 - `src/whisper_transcriber/transcriber.py` - speech-to-text via Whisper (`faster-whisper`).
 - `src/whisper_transcriber/diarizer.py` - speaker assignment using voice embeddings and clustering.
@@ -40,7 +40,7 @@ uv run transcribe run
 Or with Make:
 
 ```bash
-make run
+  make run
 ```
 
 The transcript will be saved to `output/transcript.md`.
@@ -62,7 +62,7 @@ make api
 ### Endpoints
 
 - `GET /health` -> `{"status":"ok"}`
-- `POST /transcribe` -> transcribes `inbox/input.mp3`, writes `output/transcript.md`, returns JSON with `output_file` and `transcript`.
+- `POST /transcribe` -> transcribes `inbox/input.<ext>`, writes `output/transcript.md`, returns JSON with `output_file` and `transcript`.
 
 ## Make commands
 
