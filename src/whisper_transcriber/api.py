@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Callable
 
@@ -10,6 +11,7 @@ from whisper_transcriber.pipeline import TranscriptionPipeline
 
 
 PipelineFactory = Callable[[], TranscriptionPipeline]
+logger = logging.getLogger("chatter_split.api")
 
 
 def create_app(
@@ -21,6 +23,7 @@ def create_app(
 
     @app.get("/health")
     def health() -> dict[str, str]:
+        logger.info("Health check requested")
         return {"status": "ok"}
 
     @app.post("/transcribe")
@@ -29,12 +32,15 @@ def create_app(
         output_file = output_dir / "transcript.md"
 
         if not input_file.exists():
+            logger.error("Input file does not exist: %s", input_file)
             raise HTTPException(status_code=400, detail=f"Input file does not exist: {input_file}")
 
         output_dir.mkdir(parents=True, exist_ok=True)
+        logger.info("Transcription requested for file: %s", input_file)
         pipeline = pipeline_factory()
         transcript = pipeline.run(input_file)
         output_file.write_text(transcript, encoding="utf-8")
+        logger.info("Transcript saved to: %s", output_file)
 
         return {
             "output_file": str(output_file),

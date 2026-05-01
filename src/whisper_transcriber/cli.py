@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
+import logging
 
 import typer
 from rich.console import Console
@@ -9,29 +11,97 @@ from whisper_transcriber.diarizer import SpeakerDiarizer
 from whisper_transcriber.pipeline import TranscriptionPipeline
 from whisper_transcriber.transcriber import WhisperTranscriber
 
-app = typer.Typer(add_completion=False)
+ASCII_LOGO = r"""
+      _           _   _             __         _ _ _
+  ___| |__   __ _| |_| |_ ___ _ __ / /__ _ __ | (_) |_
+ / __| '_ \ / _` | __| __/ _ \ '__/ / __| '_ \| | | __|
+| (__| | | | (_| | |_| ||  __/ | / /\__ \ |_) | | | |_
+ \___|_| |_|\__,_|\__|\__\___|_|/_/ |___/ .__/|_|_|\__|
+                                        |_|
+"""
+
+app = typer.Typer(
+    add_completion=False,
+    no_args_is_help=True,
+    add_help_option=False,
+    context_settings={"help_option_names": []},
+    help="Chatter Split CLI",
+)
 console = Console()
+logger = logging.getLogger("chatter_split.cli")
+_LOGGING_CONFIGURED = False
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 INBOX_DIR = PROJECT_ROOT / "inbox"
 OUTPUT_DIR = PROJECT_ROOT / "output"
+PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
 
 
 def build_pipeline() -> TranscriptionPipeline:
+    logger.info("Building transcription pipeline")
     return TranscriptionPipeline(
         transcriber=WhisperTranscriber(model_name="small"),
         diarizer=SpeakerDiarizer(),
     )
 
 
+def configure_logging() -> None:
+    global _LOGGING_CONFIGURED
+    if _LOGGING_CONFIGURED:
+        return
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
+    _LOGGING_CONFIGURED = True
+
+
+def project_version() -> str:
+    if not PYPROJECT_PATH.exists():
+        return "unknown"
+    with PYPROJECT_PATH.open("rb") as f:
+        data = tomllib.load(f)
+    return str(data.get("project", {}).get("version", "unknown"))
+
+
+def _custom_help() -> str:
+    version = project_version()
+    return (
+        f"[yellow]{ASCII_LOGO}[/yellow]\n"
+        "[bold]Chatter Split CLI[/bold]\n\n"
+        f"[cyan]Version:[/cyan] {version}\n\n"
+        "[bold]Usage:[/bold]\n"
+        "  transcribe [OPTIONS] COMMAND [ARGS]...\n\n"
+        "[bold]Options:[/bold]\n"
+        "  --help, -h  Show this message and exit.\n\n"
+        "[bold]Commands:[/bold]\n"
+        "  run\n"
+        "  api\n"
+    )
+
+
+@app.callback(invoke_without_command=True)
+def root_callback(
+    ctx: typer.Context,
+    help_flag: bool = typer.Option(False, "--help", "-h", is_eager=True),
+) -> None:
+    configure_logging()
+    if help_flag or ctx.invoked_subcommand is None:
+        console.print(_custom_help())
+        raise typer.Exit()
+
+
 def run_transcription(input_file: Path, output_file: Path) -> Path:
     if not input_file.exists():
+        logger.error("Input file does not exist: %s", input_file)
         raise typer.BadParameter(f"Input file does not exist: {input_file}")
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Starting transcription for file: %s", input_file)
     pipeline = build_pipeline()
     markdown = pipeline.run(input_file)
     output_file.write_text(markdown, encoding="utf-8")
+    logger.info("Transcript saved to: %s", output_file)
     return output_file
 
 
@@ -40,15 +110,17 @@ def run_command() -> None:
     input_file = INBOX_DIR / "input.mp3"
     output_file = OUTPUT_DIR / "transcript.md"
     saved = run_transcription(input_file, output_file)
-    console.print(f"Saved transcript: {saved}")
+    console.print(f"[green]Saved transcript:[/green] {saved}")
 
 
 @app.command("api")
 def api_command(host: str = "0.0.0.0", port: int = 8000) -> None:
     import uvicorn
 
+    logger.info("Starting API server on %s:%s", host, port)
     uvicorn.run("whisper_transcriber.api:app", host=host, port=port)
 
 
 if __name__ == "__main__":
+    configure_logging()
     app()
