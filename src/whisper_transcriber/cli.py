@@ -3,6 +3,7 @@ from __future__ import annotations
 import tomllib
 from pathlib import Path
 import logging
+import os
 
 import typer
 from rich.console import Console
@@ -39,7 +40,7 @@ PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
 
 
 def build_pipeline() -> TranscriptionPipeline:
-    logger.info("Building transcription pipeline")
+    logger.info("Preparing transcription pipeline")
     return TranscriptionPipeline(
         transcriber=WhisperTranscriber(model_name="small"),
         diarizer=SpeakerDiarizer(),
@@ -50,10 +51,43 @@ def configure_logging() -> None:
     global _LOGGING_CONFIGURED
     if _LOGGING_CONFIGURED:
         return
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
-    )
+    level_name = os.getenv("CHATTERSPLIT_LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+
+    class ColorLevelFormatter(logging.Formatter):
+        COLORS = {
+            logging.INFO: "\x1b[32m",
+            logging.WARNING: "\x1b[33m",
+            logging.ERROR: "\x1b[31m",
+            logging.CRITICAL: "\x1b[31m",
+        }
+        RESET = "\x1b[0m"
+
+        def format(self, record: logging.LogRecord) -> str:
+            ts = self.formatTime(record, "%Y-%m-%d %H:%M:%S")
+            color = self.COLORS.get(record.levelno, "")
+            level_label = f"{color}{record.levelname}{self.RESET}" if color else record.levelname
+            return f"{ts} | {level_label} | {record.getMessage()}"
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(ColorLevelFormatter())
+
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.setLevel(level)
+    root_logger.addHandler(handler)
+
+    for noisy_logger in (
+        "httpx",
+        "httpcore",
+        "huggingface_hub",
+        "faster_whisper",
+        "speechbrain",
+        "urllib3",
+        "asyncio",
+    ):
+        logging.getLogger(noisy_logger).setLevel(logging.WARNING)
+
     _LOGGING_CONFIGURED = True
 
 
@@ -98,11 +132,12 @@ def run_transcription(input_file: Path, output_file: Path) -> Path:
         raise typer.BadParameter(f"Input file does not exist: {input_file}")
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
-    logger.info("Starting transcription for file: %s", input_file)
+    logger.info("Starting transcription: %s", input_file.name)
     pipeline = build_pipeline()
+    logger.info("Running speech recognition and speaker separation")
     markdown = pipeline.run(input_file)
     output_file.write_text(markdown, encoding="utf-8")
-    logger.info("Transcript saved to: %s", output_file)
+    logger.info("Done. Transcript saved: %s", output_file)
     return output_file
 
 

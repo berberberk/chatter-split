@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 
 import numpy as np
@@ -9,6 +10,8 @@ from sklearn.cluster import AgglomerativeClustering
 from speechbrain.inference.speaker import EncoderClassifier
 
 from whisper_transcriber.pipeline import Segment
+
+logger = logging.getLogger("chatter_split.diarizer")
 
 
 class SpeakerDiarizer:
@@ -20,8 +23,10 @@ class SpeakerDiarizer:
 
     def assign_speakers(self, segments: list[Segment], audio_path: Path) -> list[tuple[str, Segment]]:
         if not segments:
+            logger.warning("No speech segments found for diarization")
             return []
 
+        logger.info("Starting speaker separation")
         waveform, sample_rate = torchaudio.load(str(audio_path))
         if waveform.shape[0] > 1:
             waveform = waveform.mean(dim=0, keepdim=True)
@@ -52,7 +57,11 @@ class SpeakerDiarizer:
             ).fit_predict(matrix)
 
         labels = self._normalize_labels(labels, n_segments)
-        return [(f"Speaker {label + 1}", segment) for label, segment in zip(labels, segments)]
+        result = [(f"Speaker {label + 1}", segment) for label, segment in zip(labels, segments)]
+        speaker_count = len({speaker for speaker, _ in result})
+        logger.info("Speaker separation complete: %s speakers detected", speaker_count)
+        logger.debug("Speaker labels: %s", [speaker for speaker, _ in result])
+        return result
 
     def _normalize_labels(self, labels: np.ndarray, n_segments: int) -> np.ndarray:
         unique = sorted(set(int(v) for v in labels.tolist()))

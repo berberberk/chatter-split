@@ -24,7 +24,7 @@ def create_app(
 
     @app.get("/health")
     def health() -> dict[str, str]:
-        logger.info("Health check requested")
+        logger.info("Health check request received")
         return {"status": "ok"}
 
     @app.post("/transcribe")
@@ -37,11 +37,11 @@ def create_app(
             raise HTTPException(status_code=400, detail=f"Input file does not exist: {inbox_dir / 'input.<ext>'}")
 
         output_dir.mkdir(parents=True, exist_ok=True)
-        logger.info("Transcription requested for file: %s", input_file)
+        logger.info("API transcription request: %s", input_file.name)
         pipeline = pipeline_factory()
         transcript = pipeline.run(input_file)
         output_file.write_text(transcript, encoding="utf-8")
-        logger.info("Transcript saved to: %s", output_file)
+        logger.info("API transcription complete: %s", output_file)
 
         return {
             "output_file": str(output_file),
