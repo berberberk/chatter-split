@@ -5,7 +5,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
-import torchaudio
+from faster_whisper.audio import decode_audio
 from sklearn.cluster import AgglomerativeClustering
 from speechbrain.inference.speaker import EncoderClassifier
 
@@ -27,9 +27,9 @@ class SpeakerDiarizer:
             return []
 
         logger.info("Starting speaker separation")
-        waveform, sample_rate = torchaudio.load(str(audio_path))
-        if waveform.shape[0] > 1:
-            waveform = waveform.mean(dim=0, keepdim=True)
+        sample_rate = 16000
+        audio = decode_audio(str(audio_path), sampling_rate=sample_rate)
+        waveform = torch.from_numpy(audio).float().unsqueeze(0)
 
         embeddings: list[np.ndarray] = []
         for seg in segments:
