@@ -27,6 +27,8 @@ Speaker 2:
 
 ```bash
 uv sync
+cp .env.example .env
+# set HF_TOKEN in .env
 ```
 
 ## CLI usage

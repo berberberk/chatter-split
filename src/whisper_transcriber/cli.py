@@ -9,6 +9,7 @@ import typer
 from rich.console import Console
 
 from whisper_transcriber.diarizer import SpeakerDiarizer
+from whisper_transcriber.env_config import load_environment
 from whisper_transcriber.input_resolver import resolve_input_audio
 from whisper_transcriber.pipeline import TranscriptionPipeline
 from whisper_transcriber.transcriber import WhisperTranscriber
@@ -37,6 +38,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 INBOX_DIR = PROJECT_ROOT / "inbox"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
+load_environment(PROJECT_ROOT)
 
 
 def build_pipeline() -> TranscriptionPipeline:

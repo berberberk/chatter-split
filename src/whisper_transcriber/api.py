@@ -7,12 +7,14 @@ from typing import Callable
 from fastapi import FastAPI, HTTPException
 
 from whisper_transcriber.cli import INBOX_DIR, OUTPUT_DIR, build_pipeline
+from whisper_transcriber.env_config import load_environment
 from whisper_transcriber.input_resolver import resolve_input_audio
 from whisper_transcriber.pipeline import TranscriptionPipeline
 
 
 PipelineFactory = Callable[[], TranscriptionPipeline]
 logger = logging.getLogger("chatter_split.api")
+load_environment(Path(__file__).resolve().parents[2])
 
 
 def create_app(
