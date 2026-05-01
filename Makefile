@@ -1,4 +1,8 @@
-.PHONY: test run api lint
+.DEFAULT_GOAL := help
+.PHONY: help test run api lint
+
+help:
+	uv run python -m whisper_transcriber.help_view
 
 test:
 	uv run --with pytest --with pytest-mock pytest -q
