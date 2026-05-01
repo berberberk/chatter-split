@@ -29,6 +29,7 @@ Speaker 2:
 uv sync
 cp .env.example .env
 # set HF_TOKEN in .env
+# optionally set CHATTERSPLIT_EXPECTED_SPEAKERS, default is 4
 ```
 
 ## CLI usage
@@ -46,6 +47,12 @@ Or with Make:
 ```
 
 The transcript will be saved to `output/transcript.md`.
+
+If you know the number of speakers, pass it explicitly:
+
+```bash
+uv run transcribe run --speakers 4
+```
 
 ## API usage
 
