@@ -1,8 +1,8 @@
-# Whisper Speech Transcriber
+# ChatterSplit
 
-Локальный бесплатный транскрибатор MP3 в Markdown c разделением по спикерам.
+A local, free speech transcription tool for MP3 files using Whisper, with speaker separation and clean dialogue output.
 
-## Формат результата
+## Output format
 
 ```md
 Speaker 1:
@@ -12,66 +12,69 @@ Speaker 2:
 - ...
 ```
 
-## Структура
+## Project structure
 
-- `inbox/input.mp3` - входной файл.
-- `output/transcript.md` - результат.
-- `src/whisper_transcriber/transcriber.py` - распознавание речи через Whisper.
-- `src/whisper_transcriber/diarizer.py` - назначение спикеров по эмбеддингам.
-- `src/whisper_transcriber/pipeline.py` - оркестрация шагов.
-- `src/whisper_transcriber/formatter.py` - рендер Markdown.
-- `src/whisper_transcriber/cli.py` - CLI команды.
-- `src/whisper_transcriber/api.py` - FastAPI эндпоинты.
+- `inbox/input.mp3` - input audio file.
+- `output/transcript.md` - generated transcript.
+- `src/whisper_transcriber/transcriber.py` - speech-to-text via Whisper (`faster-whisper`).
+- `src/whisper_transcriber/diarizer.py` - speaker assignment using voice embeddings and clustering.
+- `src/whisper_transcriber/pipeline.py` - orchestration layer.
+- `src/whisper_transcriber/formatter.py` - Markdown dialogue renderer.
+- `src/whisper_transcriber/cli.py` - CLI commands.
+- `src/whisper_transcriber/api.py` - FastAPI endpoints.
 
-## Установка
+## Installation
 
 ```bash
 uv sync
 ```
 
-## CLI
+## CLI usage
+
+Run transcription:
 
 ```bash
 uv run transcribe run
 ```
 
-или через make:
+Or with Make:
 
 ```bash
 make run
 ```
 
-Результат сохраняется в `output/transcript.md`.
+The transcript will be saved to `output/transcript.md`.
 
-## FastAPI
+## API usage
 
-Запуск API:
+Start API server:
 
 ```bash
 uv run transcribe api
 ```
 
-или через make:
+Or with Make:
 
 ```bash
 make api
 ```
 
-Эндпоинты:
+### Endpoints
 
 - `GET /health` -> `{"status":"ok"}`
-- `POST /transcribe` -> запускает транскрибацию `inbox/input.mp3`, пишет `output/transcript.md` и возвращает JSON с путём и текстом.
+- `POST /transcribe` -> transcribes `inbox/input.mp3`, writes `output/transcript.md`, returns JSON with `output_file` and `transcript`.
 
-## Make команды
+## Make commands
 
 ```bash
+make help
 make test
 make run
 make api
 make lint
 ```
 
-## Тесты
+## Testing
 
 ```bash
 make test
