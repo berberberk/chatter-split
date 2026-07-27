@@ -1,4 +1,5 @@
 from whisper_transcriber.formatter import render_markdown_dialogue
+from whisper_transcriber.pipeline import Segment
 
 
 def test_render_markdown_dialogue_groups_consecutive_same_speaker() -> None:
@@ -43,3 +44,14 @@ def test_render_markdown_dialogue_turn_is_single_paragraph() -> None:
     output = render_markdown_dialogue(turns)
 
     assert output == "Speaker 1:\n- Первый фрагмент второй фрагмент третий фрагмент\n"
+
+
+def test_render_markdown_dialogue_includes_segment_timestamps() -> None:
+    turns = [
+        ("Speaker 1", Segment(start=1.0, end=2.5, text="Привет")),
+        ("Speaker 1", Segment(start=2.5, end=3.0, text="ещё")),
+    ]
+
+    output = render_markdown_dialogue(turns)
+
+    assert output == "Speaker 1:\n- [00:01.00-00:03.00] Привет ещё\n"

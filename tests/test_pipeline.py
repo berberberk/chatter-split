@@ -24,5 +24,5 @@ def test_pipeline_builds_markdown() -> None:
     text = pipeline.run(Path("inbox/input.mp3"))
 
     assert "Speaker 1:" in text
-    assert "- Привет" in text
+    assert "- [00:00.00-00:04.00] Привет Здравствуйте" in text
     assert "Speaker 2:" in text
