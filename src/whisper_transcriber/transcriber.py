@@ -14,7 +14,7 @@ from rich.progress import (
     TimeRemainingColumn,
 )
 
-from whisper_transcriber.pipeline import Segment
+from whisper_transcriber.pipeline import Segment, Word
 
 logger = logging.getLogger("chatter_split.transcriber")
 
@@ -30,6 +30,7 @@ class WhisperTranscriber:
             language="ru",
             vad_filter=True,
             beam_size=5,
+            word_timestamps=True,
         )
         total_seconds = float(getattr(info, "duration", 0.0) or 0.0)
         result: list[Segment] = []
@@ -49,7 +50,12 @@ class WhisperTranscriber:
             for s in segments:
                 text = s.text.strip()
                 if text:
-                    result.append(Segment(start=s.start, end=s.end, text=text))
+                    words = [
+                        Word(start=float(w.start), end=float(w.end), text=w.word.strip())
+                        for w in (getattr(s, "words", None) or [])
+                        if w.word.strip()
+                    ]
+                    result.append(Segment(start=s.start, end=s.end, text=text, words=words))
 
                 if total_seconds > 0:
                     current_end = max(float(s.end), last_end)

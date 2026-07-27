@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol
 
@@ -8,10 +8,18 @@ from whisper_transcriber.formatter import render_markdown_dialogue
 
 
 @dataclass(slots=True)
+class Word:
+    start: float
+    end: float
+    text: str
+
+
+@dataclass(slots=True)
 class Segment:
     start: float
     end: float
     text: str
+    words: list[Word] = field(default_factory=list)
 
 
 class Transcriber(Protocol):
@@ -30,5 +38,4 @@ class TranscriptionPipeline:
     def run(self, audio_path: Path) -> str:
         segments = self._transcriber.transcribe(audio_path)
         speaker_segments = self._diarizer.assign_speakers(segments, audio_path)
-        turns = [(speaker, segment.text) for speaker, segment in speaker_segments]
-        return render_markdown_dialogue(turns)
+        return render_markdown_dialogue(speaker_segments)
