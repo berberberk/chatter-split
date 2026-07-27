@@ -8,7 +8,7 @@ import os
 import typer
 from rich.console import Console
 
-from whisper_transcriber.diarizer import SpeakerDiarizer
+from whisper_transcriber.diarizer_factory import build_diarizer
 from whisper_transcriber.env_config import load_environment
 from whisper_transcriber.input_resolver import resolve_input_audio
 from whisper_transcriber.pipeline import TranscriptionPipeline
@@ -41,12 +41,53 @@ PYPROJECT_PATH = PROJECT_ROOT / "pyproject.toml"
 load_environment(PROJECT_ROOT)
 
 
-def build_pipeline(expected_speakers: int | None = None) -> TranscriptionPipeline:
+def build_pipeline(
+    expected_speakers: int | None = None,
+    min_speakers: int | None = None,
+    max_speakers: int | None = None,
+    diarizer_backend: str | None = None,
+) -> TranscriptionPipeline:
     logger.info("Preparing transcription pipeline")
+    backend = diarizer_backend or os.getenv("CHATTERSPLIT_DIARIZER_BACKEND", "pyannote")
+    hf_token = os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN")
+    expected_speakers = expected_speakers if expected_speakers is not None else _optional_env_int(
+        "CHATTERSPLIT_EXPECTED_SPEAKERS"
+    )
+    min_speakers = min_speakers if min_speakers is not None else _optional_env_int("CHATTERSPLIT_MIN_SPEAKERS")
+    max_speakers = max_speakers if max_speakers is not None else _optional_env_int("CHATTERSPLIT_MAX_SPEAKERS")
+    _validate_speaker_options(expected_speakers, min_speakers, max_speakers)
+    diarizer = build_diarizer(
+        backend=backend,
+        expected_speakers=expected_speakers,
+        min_speakers=min_speakers,
+        max_speakers=max_speakers,
+        hf_token=hf_token,
+    )
     return TranscriptionPipeline(
         transcriber=WhisperTranscriber(model_name="small"),
-        diarizer=SpeakerDiarizer(expected_speakers=expected_speakers),
+        diarizer=diarizer,
     )
+
+
+def _optional_env_int(name: str) -> int | None:
+    raw = os.getenv(name)
+    if raw is None or raw.strip() == "":
+        return None
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise RuntimeError(f"{name} must be an integer.") from exc
+
+
+def _validate_speaker_options(
+    expected_speakers: int | None,
+    min_speakers: int | None,
+    max_speakers: int | None,
+) -> None:
+    if expected_speakers is not None and (min_speakers is not None or max_speakers is not None):
+        raise RuntimeError("Use either --speakers for an exact count or --min-speakers/--max-speakers bounds, not both.")
+    if min_speakers is not None and max_speakers is not None and min_speakers > max_speakers:
+        raise RuntimeError("--min-speakers cannot be greater than --max-speakers.")
 
 
 def configure_logging() -> None:
@@ -112,7 +153,7 @@ def _custom_help() -> str:
         "[bold]Options:[/bold]\n"
         "  --help, -h  Show this message and exit.\n\n"
         "[bold]Commands:[/bold]\n"
-        "  run [--speakers N]\n"
+        "  run [--speakers N] [--min-speakers N] [--max-speakers N]\n"
         "  api\n"
     )
 
@@ -135,7 +176,7 @@ def run_transcription(input_file: Path, output_file: Path, expected_speakers: in
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Starting transcription: %s", input_file.name)
-    pipeline = build_pipeline() if expected_speakers is None else build_pipeline(expected_speakers=expected_speakers)
+    pipeline = build_pipeline(expected_speakers=expected_speakers)
     logger.info("Running speech recognition and speaker separation")
     markdown = pipeline.run(input_file)
     output_file.write_text(markdown, encoding="utf-8")
@@ -151,7 +192,26 @@ def run_command(
         "-s",
         min=1,
         max=12,
-        help="Expected number of speakers. Defaults to CHATTERSPLIT_EXPECTED_SPEAKERS or 4.",
+        help="Exact number of speakers. Use only when known.",
+    ),
+    min_speakers: int | None = typer.Option(
+        None,
+        "--min-speakers",
+        min=1,
+        max=12,
+        help="Minimum number of speakers when the exact count is unknown.",
+    ),
+    max_speakers: int | None = typer.Option(
+        None,
+        "--max-speakers",
+        min=1,
+        max=12,
+        help="Maximum number of speakers when the exact count is unknown.",
+    ),
+    diarizer_backend: str | None = typer.Option(
+        None,
+        "--diarizer-backend",
+        help="Diarization backend: pyannote or speechbrain. Defaults to pyannote.",
     ),
 ) -> None:
     input_file = resolve_input_audio(INBOX_DIR)
@@ -159,7 +219,24 @@ def run_command(
         logger.error("Input audio file was not found in: %s", INBOX_DIR)
         raise typer.BadParameter(f"Input file does not exist: {INBOX_DIR / 'input.<ext>'}")
     output_file = OUTPUT_DIR / "transcript.md"
-    saved = run_transcription(input_file, output_file, expected_speakers=speakers)
+    if diarizer_backend and diarizer_backend not in {"speechbrain", "pyannote"}:
+        raise typer.BadParameter("Unsupported diarizer backend. Use 'speechbrain' or 'pyannote'.")
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    logger.info("Starting transcription: %s", input_file.name)
+    try:
+        pipeline = build_pipeline(
+            expected_speakers=speakers,
+            min_speakers=min_speakers,
+            max_speakers=max_speakers,
+            diarizer_backend=diarizer_backend,
+        )
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from exc
+    logger.info("Running speech recognition and speaker separation")
+    markdown = pipeline.run(input_file)
+    output_file.write_text(markdown, encoding="utf-8")
+    logger.info("Done. Transcript saved: %s", output_file)
+    saved = output_file
     console.print(f"[green]Saved transcript:[/green] {saved}")
 
 
