@@ -4,6 +4,7 @@ import tomllib
 from pathlib import Path
 import logging
 import os
+import time
 
 import typer
 from rich.console import Console
@@ -11,7 +12,8 @@ from rich.console import Console
 from whisper_transcriber.diarizer_factory import build_diarizer
 from whisper_transcriber.env_config import load_environment
 from whisper_transcriber.input_resolver import resolve_input_audio
-from whisper_transcriber.pipeline import TranscriptionPipeline
+from whisper_transcriber.metrics import build_transcript_metrics, write_transcript_metrics
+from whisper_transcriber.pipeline import TranscriptionPipeline, TranscriptionResult
 from whisper_transcriber.transcriber import WhisperTranscriber
 
 ASCII_LOGO = r"""
@@ -88,6 +90,49 @@ def _validate_speaker_options(
         raise RuntimeError("Use either --speakers for an exact count or --min-speakers/--max-speakers bounds, not both.")
     if min_speakers is not None and max_speakers is not None and min_speakers > max_speakers:
         raise RuntimeError("--min-speakers cannot be greater than --max-speakers.")
+
+
+def speaker_count_mode(
+    expected_speakers: int | None = None,
+    min_speakers: int | None = None,
+    max_speakers: int | None = None,
+) -> str:
+    if expected_speakers is not None or _optional_env_int("CHATTERSPLIT_EXPECTED_SPEAKERS") is not None:
+        return "exact"
+    if (
+        min_speakers is not None
+        or max_speakers is not None
+        or _optional_env_int("CHATTERSPLIT_MIN_SPEAKERS") is not None
+        or _optional_env_int("CHATTERSPLIT_MAX_SPEAKERS") is not None
+    ):
+        return "bounds"
+    return "auto"
+
+
+def selected_diarizer_backend(diarizer_backend: str | None = None) -> str:
+    return diarizer_backend or os.getenv("CHATTERSPLIT_DIARIZER_BACKEND", "pyannote")
+
+
+def run_pipeline_with_metrics(
+    pipeline: TranscriptionPipeline,
+    input_file: Path,
+    output_file: Path,
+    *,
+    diarizer_backend: str,
+    speaker_mode: str,
+) -> TranscriptionResult:
+    started = time.perf_counter()
+    result = pipeline.run_detailed(input_file)
+    runtime_seconds = time.perf_counter() - started
+    output_file.write_text(result.markdown, encoding="utf-8")
+    metrics = build_transcript_metrics(
+        result,
+        runtime_seconds=runtime_seconds,
+        diarizer_backend=diarizer_backend,
+        speaker_count_mode=speaker_mode,
+    )
+    write_transcript_metrics(output_file.with_suffix(".metrics.json"), metrics)
+    return result
 
 
 def configure_logging() -> None:
@@ -176,10 +221,16 @@ def run_transcription(input_file: Path, output_file: Path, expected_speakers: in
 
     output_file.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Starting transcription: %s", input_file.name)
-    pipeline = build_pipeline(expected_speakers=expected_speakers)
+    backend = selected_diarizer_backend()
+    pipeline = build_pipeline(expected_speakers=expected_speakers, diarizer_backend=backend)
     logger.info("Running speech recognition and speaker separation")
-    markdown = pipeline.run(input_file)
-    output_file.write_text(markdown, encoding="utf-8")
+    run_pipeline_with_metrics(
+        pipeline,
+        input_file,
+        output_file,
+        diarizer_backend=backend,
+        speaker_mode=speaker_count_mode(expected_speakers=expected_speakers),
+    )
     logger.info("Done. Transcript saved: %s", output_file)
     return output_file
 
@@ -223,18 +274,28 @@ def run_command(
         raise typer.BadParameter("Unsupported diarizer backend. Use 'speechbrain' or 'pyannote'.")
     output_file.parent.mkdir(parents=True, exist_ok=True)
     logger.info("Starting transcription: %s", input_file.name)
+    backend = selected_diarizer_backend(diarizer_backend)
+    mode = speaker_count_mode(expected_speakers=speakers, min_speakers=min_speakers, max_speakers=max_speakers)
     try:
         pipeline = build_pipeline(
             expected_speakers=speakers,
             min_speakers=min_speakers,
             max_speakers=max_speakers,
-            diarizer_backend=diarizer_backend,
+            diarizer_backend=backend,
         )
     except RuntimeError as exc:
         raise typer.BadParameter(str(exc)) from exc
     logger.info("Running speech recognition and speaker separation")
-    markdown = pipeline.run(input_file)
-    output_file.write_text(markdown, encoding="utf-8")
+    try:
+        run_pipeline_with_metrics(
+            pipeline,
+            input_file,
+            output_file,
+            diarizer_backend=backend,
+            speaker_mode=mode,
+        )
+    except RuntimeError as exc:
+        raise typer.BadParameter(str(exc)) from exc
     logger.info("Done. Transcript saved: %s", output_file)
     saved = output_file
     console.print(f"[green]Saved transcript:[/green] {saved}")
