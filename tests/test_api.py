@@ -3,11 +3,20 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from whisper_transcriber.api import create_app
+from whisper_transcriber.pipeline import Segment, TranscriptionResult
 
 
 class FakePipeline:
     def run(self, _input_path: Path) -> str:
-        return "Speaker 1:\n- Hello\n"
+        return self.run_detailed(_input_path).markdown
+
+    def run_detailed(self, _input_path: Path) -> TranscriptionResult:
+        segment = Segment(start=0.0, end=1.0, text="Hello")
+        return TranscriptionResult(
+            markdown="Speaker 1:\n- [00:00.00-00:01.00] Hello\n",
+            source_segments=[segment],
+            speaker_segments=[("Speaker 1", segment)],
+        )
 
 
 def test_health_endpoint() -> None:
@@ -35,8 +44,10 @@ def test_transcribe_endpoint_writes_file_for_mp3(tmp_path: Path) -> None:
     assert response.status_code == 200
     body = response.json()
     assert body["output_file"].endswith("transcript.md")
+    assert body["metrics_file"].endswith("transcript.metrics.json")
     assert "Speaker 1" in body["transcript"]
     assert (output / "transcript.md").exists()
+    assert (output / "transcript.metrics.json").exists()
 
 
 def test_transcribe_endpoint_writes_file_for_m4a(tmp_path: Path) -> None:
@@ -55,6 +66,7 @@ def test_transcribe_endpoint_writes_file_for_m4a(tmp_path: Path) -> None:
     body = response.json()
     assert "Speaker 1" in body["transcript"]
     assert (output / "transcript.md").exists()
+    assert (output / "transcript.metrics.json").exists()
 
 
 def test_transcribe_endpoint_missing_input_returns_400(tmp_path: Path) -> None:

@@ -3,11 +3,28 @@ from pathlib import Path
 from typer.testing import CliRunner
 
 from whisper_transcriber.cli import app, build_pipeline
+from whisper_transcriber.pipeline import Segment, TranscriptionResult
 
 
 class FakePipeline:
     def run(self, _input_path: Path) -> str:
-        return "Speaker 1:\n- Test\n"
+        return self.run_detailed(_input_path).markdown
+
+    def run_detailed(self, _input_path: Path) -> TranscriptionResult:
+        segment = Segment(start=0.0, end=1.0, text="Test")
+        return TranscriptionResult(
+            markdown="Speaker 1:\n- [00:00.00-00:01.00] Test\n",
+            source_segments=[segment],
+            speaker_segments=[("Speaker 1", segment)],
+        )
+
+
+class FailingPipeline:
+    def run(self, _input_path: Path) -> str:
+        raise RuntimeError("Cannot load pyannote diarization model.")
+
+    def run_detailed(self, _input_path: Path) -> TranscriptionResult:
+        raise RuntimeError("Cannot load pyannote diarization model.")
 
 
 runner = CliRunner()
@@ -29,6 +46,7 @@ def test_cli_run_writes_output_file_for_mp3(monkeypatch, tmp_path: Path) -> None
     assert result.exit_code == 0
     content = (output / "transcript.md").read_text(encoding="utf-8")
     assert "Speaker 1:" in content
+    assert (output / "transcript.metrics.json").exists()
 
 
 def test_cli_run_writes_output_file_for_m4a(monkeypatch, tmp_path: Path) -> None:
@@ -47,6 +65,7 @@ def test_cli_run_writes_output_file_for_m4a(monkeypatch, tmp_path: Path) -> None
     assert result.exit_code == 0
     content = (output / "transcript.md").read_text(encoding="utf-8")
     assert "Speaker 1:" in content
+    assert (output / "transcript.metrics.json").exists()
 
 
 def test_cli_run_passes_expected_speakers(monkeypatch, tmp_path: Path) -> None:
@@ -155,6 +174,24 @@ def test_cli_run_rejects_exact_and_bounds_together(monkeypatch, tmp_path: Path) 
 
     assert result.exit_code != 0
     assert "exact count" in result.output or "Use either" in result.output
+
+
+def test_cli_run_reports_pipeline_runtime_error(monkeypatch, tmp_path: Path) -> None:
+    inbox = tmp_path / "inbox"
+    output = tmp_path / "output"
+    inbox.mkdir()
+    output.mkdir()
+    (inbox / "input.m4a").write_bytes(b"fake")
+
+    monkeypatch.setattr("whisper_transcriber.cli.INBOX_DIR", inbox)
+    monkeypatch.setattr("whisper_transcriber.cli.OUTPUT_DIR", output)
+    monkeypatch.setattr("whisper_transcriber.cli.build_pipeline", lambda **kwargs: FailingPipeline())
+
+    result = runner.invoke(app, ["run"])
+
+    assert result.exit_code != 0
+    assert "Cannot load pyannote diarization model" in result.output
+    assert not (output / "transcript.md").exists()
 
 
 def test_build_pipeline_defaults_to_pyannote_without_speaker_count(monkeypatch) -> None:
