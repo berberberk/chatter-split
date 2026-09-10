@@ -18,11 +18,11 @@ logger = logging.getLogger("chatter_split.diarizer")
 
 @dataclass(frozen=True)
 class DiarizationConfig:
-    expected_speakers: int | None = 4
+    expected_speakers: int | None = None
     threshold: float = 0.65
     min_speakers: int = 1
     max_speakers: int = 8
-    min_turn_duration_seconds: float = 1.2
+    min_turn_duration_seconds: float = 0.0
 
 
 class SpeakerDiarizer:
@@ -31,11 +31,11 @@ class SpeakerDiarizer:
         threshold: float = 0.65,
         min_speakers: int = 1,
         max_speakers: int = 8,
-        expected_speakers: int | None = 4,
-        min_turn_duration_seconds: float = 1.2,
+        expected_speakers: int | None = None,
+        min_turn_duration_seconds: float = 0.0,
     ) -> None:
         env_expected = os.getenv("CHATTERSPLIT_EXPECTED_SPEAKERS")
-        if env_expected and expected_speakers == 4:
+        if env_expected and expected_speakers is None:
             expected_speakers = int(env_expected)
 
         self._config = DiarizationConfig(
@@ -130,6 +130,9 @@ class SpeakerDiarizer:
         return normalized
 
     def _smooth_short_turns(self, labels: np.ndarray, segments: list[Segment]) -> np.ndarray:
+        if self._config.min_turn_duration_seconds <= 0:
+            return labels
+
         smoothed = labels.copy()
         changed = True
         while changed:

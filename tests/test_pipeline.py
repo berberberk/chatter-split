@@ -24,5 +24,33 @@ def test_pipeline_builds_markdown() -> None:
     text = pipeline.run(Path("inbox/input.mp3"))
 
     assert "Speaker 1:" in text
-    assert "- Привет" in text
+    assert "- [00:00.00-00:04.00] Привет Здравствуйте" in text
     assert "Speaker 2:" in text
+
+
+def test_pipeline_prepares_diarizer_before_transcribing() -> None:
+    class FailingPrepareDiarizer:
+        def prepare(self) -> None:
+            raise RuntimeError("prepare failed")
+
+        def assign_speakers(self, segments, _):
+            return [("Speaker 1", segment) for segment in segments]
+
+    class TrackingTranscriber:
+        called = False
+
+        def transcribe(self, _: Path):
+            self.called = True
+            return [Segment(0.0, 1.0, "Привет")]
+
+    transcriber = TrackingTranscriber()
+    pipeline = TranscriptionPipeline(transcriber=transcriber, diarizer=FailingPrepareDiarizer())
+
+    try:
+        pipeline.run(Path("inbox/input.mp3"))
+    except RuntimeError as exc:
+        assert "prepare failed" in str(exc)
+    else:
+        raise AssertionError("Expected RuntimeError")
+
+    assert transcriber.called is False
